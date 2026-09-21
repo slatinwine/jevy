@@ -1,0 +1,12 @@
+{
+  "customer_service": "一般客户服务与咨询",
+  "technical_support": "产品技术支持",
+  "it_support": "IT 与内部系统支持",
+  "product_support": "产品使用与功能支持",
+  "billing": "账单、支付与费用问题",
+  "outage": "服务中断与维护",
+  "returns": "退货与换货",
+  "sales": "销售与售前咨询",
+  "hr": "人力资源相关",
+  "general": "其他一般问题"
+}

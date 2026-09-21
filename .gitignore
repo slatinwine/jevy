@@ -1,0 +1,7 @@
+__pycache__/
+model/
+model_mpnet/
+*.safetensors
+server.log
+*.csv
+.ipynb_checkpoints/
