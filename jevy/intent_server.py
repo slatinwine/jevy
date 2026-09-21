@@ -30,12 +30,13 @@ head = MarkerHead(encoder.config.hidden_size).to(device)
 head.load_state_dict(_head_state["head"])
 head.eval()
 TEMP = float(_head_state.get("temperature", 1.0))
+YES, NO = "是", "否"  # must match make_typed_data.py option texts
 
 
 @torch.no_grad()
 def score_choice(state, instructions, criteria):
     options = list(criteria.keys())
-    ids, mp = encode(tok, state, options)
+    ids, mp = encode(tok, state, instructions, options)
     hidden = encoder(input_ids=torch.tensor([ids], device=device),
                      attention_mask=torch.ones(1, len(ids), dtype=torch.long, device=device)
                      ).last_hidden_state
@@ -47,8 +48,25 @@ def score_choice(state, instructions, criteria):
 def answer_one(state, q):
     """Answer one typed question dict; returns the decisions entry."""
     t = str(q.get("type", "")).lower()
+    if t in ("bool", "boolean", "noul"):
+        # trained as a 2-marker choice with the same 是/否 option texts
+        options, probs = score_choice(state, q.get("instructions", ""), {YES: 1, NO: 2})
+        p_yes = probs[0]
+        return {"type": "bool", "value": p_yes > 0.5, "p_true": round(p_yes, 4),
+                "probabilities": {"true": round(p_yes, 4), "false": round(1 - p_yes, 4)}}
+    if t == "score":
+        criteria = q.get("criteria")
+        if not isinstance(criteria, list) or not 2 <= len(criteria) <= 10:
+            raise ValueError("score questions need criteria as an ordered list of 2-10 levels")
+        options, probs = score_choice(state, q.get("instructions", ""),
+                                      {c: i for i, c in enumerate(criteria)})
+        expected = sum(i * p for i, p in enumerate(probs)) + 1
+        best = max(range(len(options)), key=lambda i: probs[i])
+        return {"type": "score", "value": options[best], "expected": round(expected, 2),
+                "probabilities": {o: round(p, 4) for o, p in zip(options, probs)},
+                "confidence": round(probs[best], 4)}
     if t != "choice":
-        raise ValueError(f"this student serves choice questions only, got {t!r}")
+        raise ValueError(f"unknown question type: {q.get('type')!r} (use choice/bool/score)")
     criteria = q.get("criteria")
     if not isinstance(criteria, dict) or len(criteria) < 2:
         raise ValueError("choice questions need criteria with >= 2 options")

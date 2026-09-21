@@ -30,11 +30,12 @@ MARKER = "[OPT]"
 INSTRUCTIONS = "判断用户消息最符合哪个意图，选出最匹配的候选"
 
 
-def encode(tok, state, options, max_len=256, ins_cap=24, opt_cap=12):
+def encode(tok, state, instructions, options, max_len=256, ins_cap=48, opt_cap=12):
     mk = tok.convert_tokens_to_ids([MARKER])[0]
-    ins = tok.encode(INSTRUCTIONS, add_special_tokens=False)[:ins_cap]
+    ins = tok.encode(instructions, add_special_tokens=False)[:ins_cap]
     opt_ids = [tok.encode(o, add_special_tokens=False)[:opt_cap] for o in options]
-    fixed = 2 + len(ins) + 1 + sum(len(o) + 1 for o in opt_ids)
+    # per option the sequence gains marker + option + sep = len(o) + 2 tokens
+    fixed = 2 + len(ins) + 1 + sum(len(o) + 2 for o in opt_ids)
     st = tok.encode(state, add_special_tokens=False)[:max(8, max_len - fixed)]
     ids = [tok.cls_token_id] + st + [tok.sep_token_id] + ins + [tok.sep_token_id]
     marker_pos = []
@@ -42,7 +43,10 @@ def encode(tok, state, options, max_len=256, ins_cap=24, opt_cap=12):
         ids.append(mk)
         marker_pos.append(len(ids) - 1)
         ids += o + [tok.sep_token_id]
-    return ids[:max_len], marker_pos[:max_len]
+    ids = ids[:max_len]
+    # markers whose slot got truncated away must be dropped too, or the
+    # gather in MarkerHead indexes past the sequence and CUDA asserts
+    return ids, [p for p in marker_pos if p < len(ids)]
 
 
 class MarkerHead(nn.Module):
@@ -144,7 +148,7 @@ def main():
 
     def build(rec):
         options = list(rec["intents"].keys())
-        ids, mp = encode(tok, rec["message"], options)
+        ids, mp = encode(tok, rec["message"], rec.get("instructions", INSTRUCTIONS), options)
         soft = torch.tensor([rec["teacher"]["dist"][o] for o in options], dtype=torch.float)
         return ids, mp, soft
 

@@ -42,12 +42,21 @@
 
 ### 3) 真实工单域（公开数据集真实工单，10 类意图，40 条从未参与训练）
 
-| 模型 | 与官方一致率 |
-|---|---|
-| jevy v2（仅 260 条真实样本训练） | 35%（随机基线 10%） |
+| 版本 | 真实标注量 | 与官方一致率 |
+|---|---|---|
+| v0.1 | 260 条 | 35%（随机基线 10%） |
+| **v0.2** | **1000 条** | **60%** |
 
-诚实说明：真实文本的多样性远超模板，35% 是第一版真实域成绩，
-继续扩充真实标注量是最有效的提升路径（数据集里还有 1.5 万条可标）。
+真实文本多样性远超模板——继续扩充真实标注量仍是最有效的提升路径
+（源数据集还有 1.5 万条可标）。
+
+### 3.5) 三种题型（v0.2 起支持 choice / noul(布尔) / score(等级)）
+
+| 题型 | 评测 | 结果 |
+|---|---|---|
+| choice | 真实工单 40 条 vs 官方 | 60% |
+| noul（布尔） | 80 问（正例 vs 干扰项） | **84%** |
+| score（紧急度 3 级） | 100 条 held-out | MAE 0.83 级（偏弱：标签源自数据集 priority 字段，噪声较大） |
 
 ### 4) 常识陷阱题：*"洗车店离这里 50 米，开车去还是走路去洗车？"*
 
@@ -118,6 +127,25 @@ Python 调用见 [`examples/intent.py`](examples/intent.py)。
 注意：候选 `criteria` 的数量与内容**推理时随意指定**，无需重训——
 这是标记位架构的直接好处。
 
+布尔（noul）与等级（score）问题：
+
+```bash
+# 布尔：返回 value/p_true
+curl -X POST http://127.0.0.1:8767/api/v1/decide -H "Content-Type: application/json" \
+  -d "{\"state\": \"登录一直转圈进不去。\", \
+       \"questions\": {\"is_technical\": {\"type\": \"bool\", \
+         \"instructions\": \"这条消息是否属于技术故障？\"}}}"
+
+# 等级：criteria 为有序等级数组，返回分布 + expected（1 起始的期望等级）
+curl -X POST http://127.0.0.1:8767/api/v1/decide -H "Content-Type: application/json" \
+  -d "{\"state\": \"服务器宕机两小时了，客户全部投诉！\", \
+       \"questions\": {\"urgency\": {\"type\": \"score\", \
+         \"instructions\": \"评估这条消息的紧急程度。\", \
+         \"criteria\": [\"low\", \"medium\", \"high\"]}}}"
+```
+
+score 类型当前仅用紧急度 3 级数据训练，其他等级语义需要补充对应训练行。
+
 ## 自己训一个
 
 三步，全部脚本化：
@@ -131,8 +159,12 @@ python collect_distill.py --messages-file msgs.txt \
     --intents-file data/intents_synthetic.json \
     --api-key $TYPESAFE_API_KEY --out data/train_mine.jsonl
 
-# 3. 蒸馏训练 + 温度校准，然后起服务
-python train_intent.py --data data/train_mine.jsonl --out model
+# 3.（可选）从标注记录派生 noul/score 训练行，让一个模型支持三种题型
+python make_typed_data.py --labeled data/train_mine.jsonl \
+    --tickets-meta real_tickets_meta.jsonl --out-dir data/
+
+# 4. 蒸馏训练 + 温度校准，然后起服务
+python train_intent.py --data data/train_mine.jsonl data/typed_noul.jsonl data/typed_score_train.jsonl --out model
 python intent_server.py --model-dir model --port 8767
 ```
 
@@ -163,10 +195,11 @@ GTX 1650 上 10~15 分钟。
 
 ## 已知边界
 
-- 真实工单域第一版仅 35%（见对比结果 3），扩充真实标注量是当前最有效的提升路径
+- 真实工单域 v0.2 为 60%（见对比结果 3），继续扩充真实标注仍是首推路径
 - 底座只测到 118M：278M mpnet + Adafactor 在 4GB 卡上 fp16 数值不稳（dev 掉到 47% 已回退），
   更大底座建议冻结底层或用 8-bit 优化器
-- 只实现了 `choice` 类型；`score` / `noul`（布尔）问题会明确报 400
+- `score` 类型仅用紧急度 3 级（low/medium/high）训练，其他等级语义需要补训练行；
+  训练行的 `instructions` 支持每条自定义（trainer 自动读取）
 - 官方 API 计费按 token，标注 1000 条约 40 万 input token——注意配额
 
 ## 数据与许可

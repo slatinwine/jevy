@@ -5,3 +5,4 @@ model_mpnet/
 server.log
 *.csv
 .ipynb_checkpoints/
+*.zip
