@@ -34,15 +34,16 @@ YES, NO = "是", "否"  # must match make_typed_data.py option texts
 
 
 @torch.no_grad()
-def score_choice(state, instructions, criteria):
-    options = list(criteria.keys())
-    ids, mp = encode(tok, state, instructions, options)
+def score_choice(state, instructions, criteria, option_texts=None):
+    keys = list(criteria.keys())
+    texts = option_texts or keys
+    ids, mp = encode(tok, state, instructions, texts)
     hidden = encoder(input_ids=torch.tensor([ids], device=device),
                      attention_mask=torch.ones(1, len(ids), dtype=torch.long, device=device)
                      ).last_hidden_state
     logits = head(hidden, torch.tensor([mp], device=device)).float()[0]
     probs = F.softmax(logits / TEMP, dim=0).tolist()
-    return options, probs
+    return keys, probs
 
 
 def answer_one(state, q):
@@ -70,7 +71,9 @@ def answer_one(state, q):
     criteria = q.get("criteria")
     if not isinstance(criteria, dict) or len(criteria) < 2:
         raise ValueError("choice questions need criteria with >= 2 options")
-    options, probs = score_choice(state, q.get("instructions", ""), criteria)
+    options, probs = score_choice(state, q.get("instructions", ""), criteria,
+                                  option_texts=[f"{criteria[k]} ({k})" for k in criteria]
+                                  if all(str(k).startswith("idx") for k in criteria) else None)
     best = max(range(len(options)), key=lambda i: probs[i])
     return {"type": "choice", "value": options[best],
             "probabilities": {o: round(p, 4) for o, p in zip(options, probs)},

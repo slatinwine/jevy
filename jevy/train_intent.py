@@ -148,7 +148,8 @@ def main():
 
     def build(rec):
         options = list(rec["intents"].keys())
-        ids, mp = encode(tok, rec["message"], rec.get("instructions", INSTRUCTIONS), options)
+        texts = rec.get("option_texts") or options
+        ids, mp = encode(tok, rec["message"], rec.get("instructions", INSTRUCTIONS), texts)
         soft = torch.tensor([rec["teacher"]["dist"][o] for o in options], dtype=torch.float)
         return ids, mp, soft
 
