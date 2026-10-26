@@ -227,3 +227,13 @@ GTX 1650 上 10~15 分钟。
   （CC BY-NC 4.0），**仅限非商业用途**；合成消息与老师标注为本项目生成
 - 感谢 TypeSafe AI 的 Jev 与开源平替社区（[awesome-jev](https://github.com/yibie/awesome-jev)、
   NanoJev、Laya）提供的思路与对照
+
+---
+
+## 关注
+
+| 公众号 | 小红书 · 酒里加盐 |
+| :---: | :---: |
+| ![公众号二维码](qrcode.jpg) | ![小红书二维码](xhs-qr.jpg) |
+
+小红书号 `6100441379` · 酒馆会往酒里加盐，让顾客越喝越渴
